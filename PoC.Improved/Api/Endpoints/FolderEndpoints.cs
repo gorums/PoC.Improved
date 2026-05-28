@@ -1,4 +1,4 @@
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using PoC.Improved.Application.Folders;
 
 namespace PoC.Improved.Api.Endpoints;

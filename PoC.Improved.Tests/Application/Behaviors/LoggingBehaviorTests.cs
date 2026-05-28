@@ -1,4 +1,4 @@
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using Microsoft.Extensions.Logging;
 using PoC.Improved.Application.Behaviors;
 

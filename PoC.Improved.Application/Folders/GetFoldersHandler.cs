@@ -1,5 +1,5 @@
 using FluentResults;
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using PoC.Improved.Application.Providers;
 
 namespace PoC.Improved.Application.Folders;

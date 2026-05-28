@@ -1,6 +1,6 @@
 using FluentValidation;
 using FluentValidation.Results;
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using PoC.Improved.Application.Behaviors;
 using PoC.Improved.Domain;
 

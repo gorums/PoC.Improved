@@ -1,5 +1,5 @@
 using FluentResults;
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using PoC.Improved.Application.Common;
 using PoC.Improved.Application.Providers;
 

@@ -2,6 +2,7 @@ using FluentValidation;
 using PoC.Improved.Api;
 using PoC.Improved.Api.Endpoints;
 using PoC.Improved.Application.Behaviors;
+using PoC.Improved.Application.Cqrs;
 using PoC.Improved.Application.Folders;
 using PoC.Improved.Application.Providers;
 using PoC.Improved.Infrastructure.ExceptionMapping;
@@ -23,8 +24,8 @@ builder.Services.AddSingleton<IServiceCallHandler, ServiceCallHandler>();
 // --- Providers ---
 builder.Services.AddSingleton<IStorageProvider, FakeStorageProvider>();
 
-// --- MediatR + FluentValidation ---
-builder.Services.AddMediatR(cfg =>
+// --- Custom mediator + FluentValidation ---
+builder.Services.AddMediator(cfg =>
 {
     cfg.RegisterServicesFromAssemblyContaining<GetFoldersQuery>();
     cfg.AddOpenBehavior(typeof(LoggingBehavior<,>));

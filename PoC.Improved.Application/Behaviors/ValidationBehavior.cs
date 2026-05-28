@@ -1,5 +1,5 @@
 using FluentValidation;
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using PoC.Improved.Domain;
 
 namespace PoC.Improved.Application.Behaviors;

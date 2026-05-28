@@ -1,11 +1,11 @@
 using System.Diagnostics;
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using Microsoft.Extensions.Logging;
 
 namespace PoC.Improved.Application.Behaviors;
 
 /// <summary>
-/// Logs request name + elapsed time around every MediatR handler.
+/// Logs request name + elapsed time around every mediator handler.
 /// Sits outside ServiceCallHandler so we see total handler cost, retries included.
 /// </summary>
 public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>

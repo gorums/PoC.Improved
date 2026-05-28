@@ -1,4 +1,4 @@
-using MediatR;
+using PoC.Improved.Application.Cqrs;
 using PoC.Improved.Application.Files;
 
 namespace PoC.Improved.Api.Endpoints;

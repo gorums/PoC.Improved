@@ -6,7 +6,7 @@ public static class RootEndpoints
     {
         app.MapGet("/", () => Results.Ok(new
         {
-            message = "PoC.Improved demo - all endpoints flow through MediatR",
+            message = "PoC.Improved demo - all endpoints flow through the custom mediator",
             endpoints = new[]
             {
                 "GET  /folders/photos             -> 200 (happy path)",
