@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PoC.Improved</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PoC.Improved.Domain\PoC.Improved.Domain.csproj" />
+    <ProjectReference Include="..\PoC.Improved.Application\PoC.Improved.Application.csproj" />
+    <ProjectReference Include="..\PoC.Improved.Infrastructure\PoC.Improved.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only registration extensions live here; the library itself is transitive via Application. -->
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
+  </ItemGroup>
+
+</Project>

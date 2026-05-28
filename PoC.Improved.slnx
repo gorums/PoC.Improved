@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+  </Configurations>
+  <Project Path="PoC.Improved.Domain/PoC.Improved.Domain.csproj" />
+  <Project Path="PoC.Improved.Application/PoC.Improved.Application.csproj" />
+  <Project Path="PoC.Improved.Infrastructure/PoC.Improved.Infrastructure.csproj" />
+  <Project Path="PoC.Improved/PoC.Improved.csproj" />
+  <Project Path="PoC.Improved.Tests/PoC.Improved.Tests.csproj" />
+</Solution>

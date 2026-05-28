@@ -1,0 +1,37 @@
+# .NET build output
+bin/
+obj/
+out/
+publish/
+
+# Restore
+*.nuget.cache
+*.csproj.Backup.tmp
+project.assets.json
+
+# IDE / tooling
+.vs/
+.vscode/
+.idea/
+.claude/
+*.user
+*.userprefs
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+*.DotSettings.user
+
+# Test results
+TestResults/
+*.coverage
+*.coveragexml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,15 @@
+{
+  "profiles": {
+    "PoC.Improved": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5000",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Logging__LogLevel__Default": "Information",
+        "Logging__LogLevel__PoC": "Debug"
+      }
+    }
+  }
+}
