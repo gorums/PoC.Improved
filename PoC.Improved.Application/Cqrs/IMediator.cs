@@ -1,12 +1,10 @@
 namespace PoC.Improved.Application.Cqrs;
 
 /// <summary>
-/// Dispatches a request through the registered pipeline behaviors to its handler.
-/// Mirrors the subset of MediatR's IMediator that we use - just Send.
+/// Full mediator surface. Extends ISender (Send) and is reserved for future additions
+/// (e.g. IPublisher.Publish if notifications get added). Inject ISender if you only
+/// need to send a request; reach for IMediator only when you need more.
 /// </summary>
-public interface IMediator
+public interface IMediator : ISender
 {
-    Task<TResponse> Send<TResponse>(
-        IRequest<TResponse> request,
-        CancellationToken cancellationToken = default);
 }

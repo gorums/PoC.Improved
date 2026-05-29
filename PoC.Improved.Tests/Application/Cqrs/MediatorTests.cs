@@ -57,6 +57,21 @@ public class MediatorTests
     }
 
     [Fact]
+    public async Task ISender_resolves_to_the_same_instance_as_IMediator()
+    {
+        var sp = BuildServices(behaviors: Array.Empty<Type>());
+        using var scope = sp.CreateScope();
+
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+        Assert.Same(mediator, sender);
+
+        var result = await sender.Send(new PingQuery("from-sender"));
+        Assert.Equal("pong:from-sender", result);
+    }
+
+    [Fact]
     public async Task Send_throws_when_handler_is_not_registered()
     {
         var services = new ServiceCollection();

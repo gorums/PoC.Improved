@@ -46,6 +46,7 @@ public static class MediatorServiceCollectionExtensions
         configure(config);
 
         services.AddScoped<IMediator, Mediator>();
+        services.AddScoped<ISender>(sp => sp.GetRequiredService<IMediator>());
 
         foreach (var assembly in config.Assemblies)
             RegisterHandlersFromAssembly(services, assembly);

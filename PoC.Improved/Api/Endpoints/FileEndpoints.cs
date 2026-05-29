@@ -8,9 +8,9 @@ public static class FileEndpoints
     public static IEndpointRouteBuilder MapFileEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/file-url",
-            async (string? path, IMediator mediator, CancellationToken ct) =>
+            async (string? path, ISender sender, CancellationToken ct) =>
             {
-                var result = await mediator.Send(new GetFileUrlQuery(path), ct);
+                var result = await sender.Send(new GetFileUrlQuery(path), ct);
                 return result.ToHttpResult();
             });
 

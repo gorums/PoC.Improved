@@ -9,25 +9,25 @@ public static class FolderEndpoints
     {
         // List folders for a feature.
         app.MapGet("/folders/{feature?}",
-            async (string? feature, IMediator mediator, CancellationToken ct) =>
+            async (string? feature, ISender sender, CancellationToken ct) =>
             {
-                var result = await mediator.Send(new GetFoldersQuery(feature ?? ""), ct);
+                var result = await sender.Send(new GetFoldersQuery(feature ?? ""), ct);
                 return result.ToHttpResult();
             });
 
         // Look up one folder. Demonstrates Result.Fail(NotFoundError) -> 404.
         app.MapGet("/folders/{feature}/{year:int}",
-            async (string feature, int year, IMediator mediator, CancellationToken ct) =>
+            async (string feature, int year, ISender sender, CancellationToken ct) =>
             {
-                var result = await mediator.Send(new GetFolderQuery(feature, year), ct);
+                var result = await sender.Send(new GetFolderQuery(feature, year), ct);
                 return result.ToHttpResult();
             });
 
         // Create folder. Demonstrates Result.Fail(ConflictError) -> 409.
         app.MapPost("/folders/{feature}/{year:int}",
-            async (string feature, int year, IMediator mediator, CancellationToken ct) =>
+            async (string feature, int year, ISender sender, CancellationToken ct) =>
             {
-                var result = await mediator.Send(new CreateFolderCommand(feature, year), ct);
+                var result = await sender.Send(new CreateFolderCommand(feature, year), ct);
                 return result.ToHttpResult();
             });
 

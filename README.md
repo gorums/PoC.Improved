@@ -14,7 +14,7 @@ It is the *improved* counterpart of a legacy `ServiceCallHandlerWrapper` and exi
 | No retry: one transient blip = failure | Polly v8 pipeline: retry (exponential backoff + jitter) + timeout |
 | `ExecuteServiceException(ex.Message, ex)` loses context | `DomainException` carries `StatusCode` and `UserMessage` |
 | HTTP status codes scattered in `Infrastructure` | HTTP lives only in `Api/` via `IProblemDetailsService` |
-| Hard to test | Every piece mockable through its interface (65 unit tests) |
+| Hard to test | Every piece mockable through its interface (66 unit tests) |
 | Third-party mediator dependency | In-house mediator (~150 LOC) under our control |
 
 ## Solution layout
@@ -30,7 +30,8 @@ PoC.Improved.slnx
 │   │   ├── IRequest.cs               # IRequest<TResponse> marker
 │   │   ├── IRequestHandler.cs        # IRequestHandler<TRequest, TResponse>
 │   │   ├── IPipelineBehavior.cs      # IPipelineBehavior<,> + RequestHandlerDelegate<>
-│   │   ├── IMediator.cs              # IMediator.Send<TResponse>(...)
+│   │   ├── ISender.cs                # Narrow Send<T>(...) surface for callers
+│   │   ├── IMediator.cs              # Extends ISender; reserved for future Publish etc.
 │   │   ├── Mediator.cs               # Typed wrapper cache, no per-call reflection
 │   │   └── MediatorServiceCollectionExtensions.cs   # AddMediator(cfg => ...)
 │   ├── Common/
@@ -56,7 +57,7 @@ PoC.Improved.slnx
 │   │   ├── ResultExtensions.cs       # Result<T> -> 200 OK or ProblemDetails
 │   │   └── Endpoints/                # Folder + File + Root endpoints
 │   └── Program.cs
-└── PoC.Improved.Tests/               (xUnit v3 + NSubstitute, 65 tests)
+└── PoC.Improved.Tests/               (xUnit v3 + NSubstitute, 66 tests)
 ```
 
 Dependency direction: `Api -> Infrastructure -> Application -> Domain`. The Application layer never references Infrastructure — `IStorageProvider` lives in Application so handlers depend on the abstraction.
@@ -135,14 +136,14 @@ curl -i -X POST http://localhost:5000/folders/photos/2025  # 409 Result.Fail(Con
 dotnet test
 ```
 
-**65 tests** across:
+**66 tests** across:
 - Domain exceptions (status code + inner exception preserved)
 - All `IExceptionMapper`s + registry fallback
 - `LoggingBehavior`, `ValidationBehavior`
 - Every handler (success path + business failure + exception propagation)
 - All validators
 - All FluentResults `CategorizedError` subclasses
-- Custom mediator (handler routing, missing-handler error, behavior order, `AddOpenBehavior` validation)
+- Custom mediator (handler routing, ISender/IMediator share instance, missing-handler error, behavior order, `AddOpenBehavior` validation)
 
 xUnit v3, NSubstitute for mocks. No integration tests yet — the smoke path is exercised manually via curl.
 
@@ -172,7 +173,8 @@ The project originally used [MediatR](https://github.com/jbogard/MediatR). A con
 | `IRequestHandler<in TRequest, TResponse>` | Handler contract — single `Handle(request, ct)` method |
 | `IPipelineBehavior<in TRequest, TResponse>` | Cross-cutting wrapper around the handler call |
 | `RequestHandlerDelegate<TResponse>` | The `next` continuation passed to behaviors |
-| `IMediator` | Single `Send<TResponse>(IRequest<TResponse>, ct)` method |
+| `ISender` | Narrow surface: just `Send<TResponse>(IRequest<TResponse>, ct)`. Inject this at call sites that only send (endpoints, controllers) to keep the dependency surface minimal. |
+| `IMediator` | Extends `ISender`. Reserved for additions like `IPublisher.Publish` if notifications are ever added. |
 | `Mediator` | Implementation. Caches a per-request-type `RequestHandlerWrapper` so dispatch stays strongly typed (no per-call reflection on the handler interface) |
 | `AddMediator(cfg => …)` | DI extension with `RegisterServicesFromAssemblyContaining<T>()` and `AddOpenBehavior(typeof(B<,>))` — same call shape as `AddMediatR(...)` |
 
@@ -293,14 +295,20 @@ builder.Services.AddMediator(cfg =>
 
 **5. Send a request from an endpoint.**
 
+Endpoints inject `ISender` instead of the full `IMediator` — narrower dependency,
+clearer intent (this code only sends, it doesn't publish or anything else).
+
 ```csharp
 app.MapGet("/folders/{feature}/{year:int}",
-    async (string feature, int year, IMediator mediator, CancellationToken ct) =>
+    async (string feature, int year, ISender sender, CancellationToken ct) =>
     {
-        var result = await mediator.Send(new GetFolderQuery(feature, year), ct);
+        var result = await sender.Send(new GetFolderQuery(feature, year), ct);
         return result.ToHttpResult();
     });
 ```
+
+Both `ISender` and `IMediator` resolve to the same scoped `Mediator` instance —
+`MediatorTests.ISender_resolves_to_the_same_instance_as_IMediator` pins this.
 
 ### Behavior order
 
