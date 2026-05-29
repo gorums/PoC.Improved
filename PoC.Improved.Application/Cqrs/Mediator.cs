@@ -10,7 +10,8 @@ namespace PoC.Improved.Application.Cqrs;
 /// </summary>
 public sealed class Mediator : IMediator
 {
-    private static readonly ConcurrentDictionary<Type, RequestHandlerWrapperBase> _wrappers = new();
+    private static readonly ConcurrentDictionary<Type, RequestHandlerWrapperBase> _sendWrappers = new();
+    private static readonly ConcurrentDictionary<Type, RequestHandlerWrapperBase> _streamWrappers = new();
     private readonly IServiceProvider _serviceProvider;
 
     public Mediator(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
@@ -21,23 +22,41 @@ public sealed class Mediator : IMediator
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var wrapper = (RequestHandlerWrapper<TResponse>)_wrappers.GetOrAdd(
+        var wrapper = (RequestHandlerWrapper<TResponse>)_sendWrappers.GetOrAdd(
             request.GetType(),
             static reqType =>
             {
                 var wrapperType = typeof(RequestHandlerWrapperImpl<,>)
-                    .MakeGenericType(reqType, GetResponseType(reqType));
+                    .MakeGenericType(reqType, GetResponseType(reqType, typeof(IRequest<>)));
                 return (RequestHandlerWrapperBase)Activator.CreateInstance(wrapperType)!;
             });
 
         return wrapper.Handle(request, _serviceProvider, cancellationToken);
     }
 
-    private static Type GetResponseType(Type requestType)
+    public IAsyncEnumerable<TResponse> CreateStream<TResponse>(
+        IStreamRequest<TResponse> request,
+        CancellationToken cancellationToken = default)
     {
-        var requestInterface = requestType.GetInterfaces()
-            .First(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>));
-        return requestInterface.GetGenericArguments()[0];
+        ArgumentNullException.ThrowIfNull(request);
+
+        var wrapper = (StreamRequestHandlerWrapper<TResponse>)_streamWrappers.GetOrAdd(
+            request.GetType(),
+            static reqType =>
+            {
+                var wrapperType = typeof(StreamRequestHandlerWrapperImpl<,>)
+                    .MakeGenericType(reqType, GetResponseType(reqType, typeof(IStreamRequest<>)));
+                return (RequestHandlerWrapperBase)Activator.CreateInstance(wrapperType)!;
+            });
+
+        return wrapper.Handle(request, _serviceProvider, cancellationToken);
+    }
+
+    private static Type GetResponseType(Type requestType, Type openMarker)
+    {
+        var iface = requestType.GetInterfaces()
+            .First(i => i.IsGenericType && i.GetGenericTypeDefinition() == openMarker);
+        return iface.GetGenericArguments()[0];
     }
 }
 
@@ -63,7 +82,35 @@ internal sealed class RequestHandlerWrapperImpl<TRequest, TResponse> : RequestHa
 
         RequestHandlerDelegate<TResponse> next = () => handler.Handle(typedRequest, cancellationToken);
 
-        // Wrap in reverse so the first-registered behavior is outermost.
+        for (var i = behaviors.Count - 1; i >= 0; i--)
+        {
+            var behavior = behaviors[i];
+            var inner = next;
+            next = () => behavior.Handle(typedRequest, inner, cancellationToken);
+        }
+
+        return next();
+    }
+}
+
+internal abstract class StreamRequestHandlerWrapper<TResponse> : RequestHandlerWrapperBase
+{
+    public abstract IAsyncEnumerable<TResponse> Handle(
+        object request, IServiceProvider serviceProvider, CancellationToken cancellationToken);
+}
+
+internal sealed class StreamRequestHandlerWrapperImpl<TRequest, TResponse> : StreamRequestHandlerWrapper<TResponse>
+    where TRequest : IStreamRequest<TResponse>
+{
+    public override IAsyncEnumerable<TResponse> Handle(
+        object request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    {
+        var typedRequest = (TRequest)request;
+        var handler = serviceProvider.GetRequiredService<IStreamRequestHandler<TRequest, TResponse>>();
+        var behaviors = serviceProvider.GetServices<IStreamPipelineBehavior<TRequest, TResponse>>().ToList();
+
+        StreamHandlerDelegate<TResponse> next = () => handler.Handle(typedRequest, cancellationToken);
+
         for (var i = behaviors.Count - 1; i >= 0; i--)
         {
             var behavior = behaviors[i];

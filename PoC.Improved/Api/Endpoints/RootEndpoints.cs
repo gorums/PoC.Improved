@@ -18,6 +18,7 @@ public static class RootEndpoints
                 "GET  /folders/photos/2030        -> 404 Result.Fail(NotFoundError)",
                 "POST /folders/photos/2030        -> 200 created",
                 "POST /folders/photos/2025        -> 409 Result.Fail(ConflictError)",
+                "GET  /folders/stream/photos     -> 200 streaming JSON array via IStreamRequest",
                 "GET  /file-url?path=a/b.jpg      -> 200",
                 "GET  /file-url                   -> 400 ValidationBehavior",
             }

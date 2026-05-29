@@ -31,6 +31,12 @@ public static class FolderEndpoints
                 return result.ToHttpResult();
             });
 
+        // Stream folders one at a time. Demonstrates IStreamRequest / CreateStream.
+        // Minimal API serializes IAsyncEnumerable<T> as a streaming JSON array.
+        app.MapGet("/folders/stream/{feature}",
+            (string feature, ISender sender, CancellationToken ct)
+                => sender.CreateStream(new StreamFoldersQuery(feature), ct));
+
         return app;
     }
 }

@@ -26,11 +26,14 @@ PoC.Improved.slnx
 ├── PoC.Improved.Domain/              (no dependencies)
 │   └── Exceptions.cs                 # DomainException + subclasses (status code in domain)
 ├── PoC.Improved.Application/         (depends on Domain)
-│   ├── Cqrs/                         # Custom mediator (replaces MediatR, ~150 LOC)
+│   ├── Cqrs/                         # Custom mediator (replaces MediatR)
 │   │   ├── IRequest.cs               # IRequest<TResponse> marker
 │   │   ├── IRequestHandler.cs        # IRequestHandler<TRequest, TResponse>
 │   │   ├── IPipelineBehavior.cs      # IPipelineBehavior<,> + RequestHandlerDelegate<>
-│   │   ├── ISender.cs                # Narrow Send<T>(...) surface for callers
+│   │   ├── IStreamRequest.cs         # Marker for IAsyncEnumerable<T> requests
+│   │   ├── IStreamRequestHandler.cs  # IStreamRequestHandler<TRequest, TResponse>
+│   │   ├── IStreamPipelineBehavior.cs # Stream pipeline behaviors + StreamHandlerDelegate<>
+│   │   ├── ISender.cs                # Narrow Send<T>/CreateStream<T> surface for callers
 │   │   ├── IMediator.cs              # Extends ISender; reserved for future Publish etc.
 │   │   ├── Mediator.cs               # Typed wrapper cache, no per-call reflection
 │   │   └── MediatorServiceCollectionExtensions.cs   # AddMediator(cfg => ...)
@@ -44,7 +47,8 @@ PoC.Improved.slnx
 │   ├── Folders/
 │   │   ├── GetFoldersQuery / Handler / Validator
 │   │   ├── GetFolderQuery / Handler / Validator        (-> Result.Fail(NotFoundError))
-│   │   └── CreateFolderCommand / Handler / Validator   (-> Result.Fail(ConflictError))
+│   │   ├── CreateFolderCommand / Handler / Validator   (-> Result.Fail(ConflictError))
+│   │   └── StreamFoldersQuery / Handler                (-> IAsyncEnumerable<string>)
 │   └── Files/
 │       └── GetFileUrlQuery / Handler / Validator
 ├── PoC.Improved.Infrastructure/      (depends on Application + Domain)
@@ -57,7 +61,7 @@ PoC.Improved.slnx
 │   │   ├── ResultExtensions.cs       # Result<T> -> 200 OK or ProblemDetails
 │   │   └── Endpoints/                # Folder + File + Root endpoints
 │   └── Program.cs
-└── PoC.Improved.Tests/               (xUnit v3 + NSubstitute, 66 tests)
+└── PoC.Improved.Tests/               (xUnit v3 + NSubstitute, 73 tests)
 ```
 
 Dependency direction: `Api -> Infrastructure -> Application -> Domain`. The Application layer never references Infrastructure — `IStorageProvider` lives in Application so handlers depend on the abstraction.
@@ -118,6 +122,7 @@ By default it listens on `http://localhost:5000`.
 | GET | `/folders/photos/2030` | `Result.Fail(NotFoundError)` | `404` |
 | POST | `/folders/photos/2030` | New folder | `200` |
 | POST | `/folders/photos/2025` | `Result.Fail(ConflictError)` | `409` |
+| GET | `/folders/stream/photos` | `IStreamRequest` → `IAsyncEnumerable<string>` streamed as chunked JSON array | `200` |
 | GET | `/file-url?path=a/b.jpg` | Happy path | `200` |
 | GET | `/file-url` | `ValidationBehavior` rejects missing path | `400` |
 
@@ -136,14 +141,16 @@ curl -i -X POST http://localhost:5000/folders/photos/2025  # 409 Result.Fail(Con
 dotnet test
 ```
 
-**66 tests** across:
+**73 tests** across:
 - Domain exceptions (status code + inner exception preserved)
 - All `IExceptionMapper`s + registry fallback
 - `LoggingBehavior`, `ValidationBehavior`
 - Every handler (success path + business failure + exception propagation)
 - All validators
 - All FluentResults `CategorizedError` subclasses
-- Custom mediator (handler routing, ISender/IMediator share instance, missing-handler error, behavior order, `AddOpenBehavior` validation)
+- Custom mediator (handler routing, ISender/IMediator share instance, behavior order, `AddOpenBehavior` validation)
+- Stream mediator (`CreateStream` yields all items, stream pipeline-behavior order, missing handler throws, `AddOpenStreamBehavior` validation)
+- `StreamFoldersHandler` (yields in order, empty stream, cancellation honored mid-stream)
 
 xUnit v3, NSubstitute for mocks. No integration tests yet — the smoke path is exercised manually via curl.
 
@@ -173,14 +180,18 @@ The project originally used [MediatR](https://github.com/jbogard/MediatR). A con
 | `IRequestHandler<in TRequest, TResponse>` | Handler contract — single `Handle(request, ct)` method |
 | `IPipelineBehavior<in TRequest, TResponse>` | Cross-cutting wrapper around the handler call |
 | `RequestHandlerDelegate<TResponse>` | The `next` continuation passed to behaviors |
-| `ISender` | Narrow surface: just `Send<TResponse>(IRequest<TResponse>, ct)`. Inject this at call sites that only send (endpoints, controllers) to keep the dependency surface minimal. |
+| `IStreamRequest<out TResponse>` | Marker for a request that produces a stream (`IAsyncEnumerable<TResponse>`) |
+| `IStreamRequestHandler<in TRequest, TResponse>` | Stream handler — `IAsyncEnumerable<TResponse> Handle(request, ct)` |
+| `IStreamPipelineBehavior<in TRequest, TResponse>` | Cross-cutting wrapper around the stream — can intercept each item |
+| `StreamHandlerDelegate<TResponse>` | The `next` continuation passed to stream behaviors |
+| `ISender` | Narrow surface: `Send<T>(IRequest<T>, ct)` and `CreateStream<T>(IStreamRequest<T>, ct)`. Inject this at call sites that only send/stream so the dependency surface stays minimal. |
 | `IMediator` | Extends `ISender`. Reserved for additions like `IPublisher.Publish` if notifications are ever added. |
 | `Mediator` | Implementation. Caches a per-request-type `RequestHandlerWrapper` so dispatch stays strongly typed (no per-call reflection on the handler interface) |
 | `AddMediator(cfg => …)` | DI extension with `RegisterServicesFromAssemblyContaining<T>()` and `AddOpenBehavior(typeof(B<,>))` — same call shape as `AddMediatR(...)` |
 
 ### Surface NOT implemented (didn't need)
 
-`INotification` / `INotificationHandler` (pub-sub), `IStreamRequest`, separate `ISender` / `IPublisher`, exception handlers, pre/post processors, notification-publisher strategies, request-without-response variant.
+`INotification` / `INotificationHandler` (pub-sub), separate `IPublisher`, `IRequestExceptionHandler` / `IRequestExceptionAction`, pre/post processors, notification-publisher strategies, request-without-response variant.
 
 When any of these are needed, add a single interface + wrapper class to `Cqrs/`. The surface stays under our control.
 
@@ -309,6 +320,89 @@ app.MapGet("/folders/{feature}/{year:int}",
 
 Both `ISender` and `IMediator` resolve to the same scoped `Mediator` instance —
 `MediatorTests.ISender_resolves_to_the_same_instance_as_IMediator` pins this.
+
+### Streaming (IStreamRequest / CreateStream)
+
+Use stream requests when the handler produces many items over time — paginated
+upstream calls, server-sent events, live feeds, large result sets. The handler
+returns `IAsyncEnumerable<T>` so items flow as they're produced; the caller
+consumes with `await foreach`.
+
+**1. Define a stream request.**
+
+```csharp
+using PoC.Improved.Application.Cqrs;
+
+public sealed record StreamFoldersQuery(string Feature, int DelayMs = 200)
+    : IStreamRequest<string>;
+```
+
+**2. Implement the stream handler.** Use `[EnumeratorCancellation]` so the
+caller's token threads through `await foreach`.
+
+```csharp
+using System.Runtime.CompilerServices;
+using PoC.Improved.Application.Cqrs;
+
+public sealed class StreamFoldersHandler : IStreamRequestHandler<StreamFoldersQuery, string>
+{
+    private readonly IStorageProvider _storage;
+    public StreamFoldersHandler(IStorageProvider storage) => _storage = storage;
+
+    public async IAsyncEnumerable<string> Handle(
+        StreamFoldersQuery request,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        var folders = await _storage.GetFoldersAsync(request.Feature, ct);
+        foreach (var path in folders)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return path;
+            if (request.DelayMs > 0)
+                await Task.Delay(request.DelayMs, ct);
+        }
+    }
+}
+```
+
+**3. (Optional) Add a stream pipeline behavior.** Wraps each item with `await foreach`.
+
+```csharp
+public sealed class LoggingStreamBehavior<TRequest, TResponse>
+    : IStreamPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
+{
+    public async IAsyncEnumerable<TResponse> Handle(
+        TRequest request,
+        StreamHandlerDelegate<TResponse> next,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        // before stream starts
+        await foreach (var item in next().WithCancellation(ct))
+        {
+            // intercept each item if needed
+            yield return item;
+        }
+        // after stream ends
+    }
+}
+```
+
+Register with `cfg.AddOpenStreamBehavior(typeof(LoggingStreamBehavior<,>))` in
+`AddMediator`. Stream behaviors are *separate* from regular `IPipelineBehavior`
+— register them on the right collection.
+
+**4. Stream from an endpoint.** Minimal API serialises `IAsyncEnumerable<T>`
+directly as a chunked JSON array — no extra plumbing.
+
+```csharp
+app.MapGet("/folders/stream/{feature}",
+    (string feature, ISender sender, CancellationToken ct)
+        => sender.CreateStream(new StreamFoldersQuery(feature), ct));
+```
+
+Verify the streaming wire format with `curl -i` — `Transfer-Encoding: chunked`
+on the response header means items are flushed as they're produced.
 
 ### Behavior order
 

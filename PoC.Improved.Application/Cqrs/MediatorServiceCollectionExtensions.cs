@@ -7,6 +7,7 @@ public sealed class MediatorConfiguration
 {
     internal HashSet<Assembly> Assemblies { get; } = new();
     internal List<Type> Behaviors { get; } = new();
+    internal List<Type> StreamBehaviors { get; } = new();
 
     public MediatorConfiguration RegisterServicesFromAssemblyContaining<T>()
     {
@@ -30,13 +31,25 @@ public sealed class MediatorConfiguration
         Behaviors.Add(behaviorType);
         return this;
     }
+
+    public MediatorConfiguration AddOpenStreamBehavior(Type behaviorType)
+    {
+        if (!behaviorType.IsGenericTypeDefinition)
+            throw new ArgumentException(
+                "Stream behavior must be an open generic type (e.g. typeof(MyStreamBehavior<,>)).",
+                nameof(behaviorType));
+
+        StreamBehaviors.Add(behaviorType);
+        return this;
+    }
 }
 
 public static class MediatorServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the custom IMediator, scans assemblies for IRequestHandler implementations,
-    /// and registers pipeline behaviors as open generics in the order they were added.
+    /// Registers the custom IMediator/ISender, scans assemblies for IRequestHandler and
+    /// IStreamRequestHandler implementations, and registers pipeline behaviors (and stream
+    /// pipeline behaviors) as open generics in the order they were added.
     /// </summary>
     public static IServiceCollection AddMediator(
         this IServiceCollection services,
@@ -54,12 +67,16 @@ public static class MediatorServiceCollectionExtensions
         foreach (var behaviorType in config.Behaviors)
             services.AddTransient(typeof(IPipelineBehavior<,>), behaviorType);
 
+        foreach (var behaviorType in config.StreamBehaviors)
+            services.AddTransient(typeof(IStreamPipelineBehavior<,>), behaviorType);
+
         return services;
     }
 
     private static void RegisterHandlersFromAssembly(IServiceCollection services, Assembly assembly)
     {
-        var openHandler = typeof(IRequestHandler<,>);
+        var openRequest = typeof(IRequestHandler<,>);
+        var openStream = typeof(IStreamRequestHandler<,>);
 
         foreach (var type in assembly.GetTypes())
         {
@@ -68,7 +85,9 @@ public static class MediatorServiceCollectionExtensions
 
             foreach (var iface in type.GetInterfaces())
             {
-                if (iface.IsGenericType && iface.GetGenericTypeDefinition() == openHandler)
+                if (!iface.IsGenericType) continue;
+                var def = iface.GetGenericTypeDefinition();
+                if (def == openRequest || def == openStream)
                     services.AddTransient(iface, type);
             }
         }
